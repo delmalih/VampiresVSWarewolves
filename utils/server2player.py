@@ -5,6 +5,7 @@
 ###########
 
 import struct
+import sys
 
 #############
 # Functions #
@@ -44,6 +45,9 @@ def header2action(header):
         return get_HME
     elif header == "MAP" or header == "UPD":
         return get_MAP_UPD
+    elif header == "END" or header == "BYE":
+        print("Goodbye ! :)")
+        sys.exit(0)
     else:
         raise NotImplementedError
 
