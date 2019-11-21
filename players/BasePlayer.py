@@ -21,7 +21,7 @@ class BasePlayer:
     def __init__(self, name, sock):
         self.name = name
         self.sock = sock
-        self.player_id = 1
+        self.player_id = None
         self.game_state = {}
         self.start_game()
     
@@ -64,8 +64,12 @@ class BasePlayer:
         self.game_state["height"] = info_received.get("height", self.game_state.get("height"))
         self.game_state["width"] = info_received.get("width", self.game_state.get("width"))
         self.game_state["houses"] = info_received.get("houses", self.game_state.get("houses"))
+        self.game_state["start_position"] = info_received.get("start_position", self.game_state.get("start_position"))
         self.game_state["commands"] = self.game_state.get("commands", {})
         self.game_state["commands"].update(info_received.get("commands", {}))
+        n_v = self.game_state["commands"][self.game_state["start_position"]][1]
+        self.player_id = 1 if n_v != 0 else 2
+
 
     def get_possible_moves(self):
         H = self.game_state["height"]
