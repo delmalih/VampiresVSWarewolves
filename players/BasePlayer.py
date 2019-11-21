@@ -36,7 +36,14 @@ class BasePlayer:
         self.update_game_state(["UPD"])
     
     def play(self):
-        pass
+        next_move = self.get_next_move()
+        if next_move is not None:
+            player2server.send_MOV(self.sock, next_move)
+        self.update_game()
+        self.play()
+
+    def get_next_move(self):
+        return None
 
     def update_game_state(self, headers_to_get):
         info_received = {}

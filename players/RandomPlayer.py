@@ -23,7 +23,7 @@ class RandomPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
 
-    def play(self):
+    def get_next_move(self):
         possible_moves = self.get_possible_moves()
         if len(possible_moves) > 0:
             next_moves = [possible_moves[np.random.choice(range(len(possible_moves)))]]
@@ -36,7 +36,6 @@ class RandomPlayer(BasePlayer):
                     "y_t": next_move[2][1],
                 } for next_move in next_moves]
             })
-            player2server.send_MOV(self.sock, params)
-        self.update_game()
-        self.play()
+            return params
+        return None
     

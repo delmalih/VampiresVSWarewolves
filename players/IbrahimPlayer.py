@@ -21,6 +21,6 @@ class IbrahimPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
 
-    def play(self):
+    def get_next_move(self):
         # TODO
-        pass
+        return None
