@@ -42,7 +42,12 @@ class BasePlayer:
         info_received = {}
         while headers_to_get:
             header = server2player.get_header(self.sock)
-            res = server2player.header2action(header)(self.sock)
+            print(header)
+            if header == "END":
+                self.__init__(self.name, self.sock)
+                break
+            else:
+                res = server2player.header2action(header)(self.sock)
             if header in headers_to_get:
                 info_received.update(res)
                 headers_to_get.remove(header)
