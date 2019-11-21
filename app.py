@@ -21,7 +21,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Arguments for the game")
     parser.add_argument("-H", "--host", dest="host", help="HOST IPv4 Address", required=True)
     parser.add_argument("-P", "--port", dest="port", help="Server PORT", default="5555")
-    parser.add_argument("-n", "--name", dest="name", help="Player name", default="Player 1")
+    parser.add_argument("-n", "--name", dest="name", help="Player name", default="Anonymous")
     return parser.parse_args()
 
 def init_variables():
