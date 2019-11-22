@@ -6,6 +6,7 @@
 
 """ Global """
 from easydict import EasyDict as edict
+import numpy as np
 import sys
 
 """" Local """
@@ -36,13 +37,22 @@ class BasePlayer:
         self.update_game_state(["UPD"])
     
     def play(self):
-        next_move = self.get_next_move()
-        if next_move is not None:
-            player2server.send_MOV(self.sock, next_move)
+        next_actions = self.get_next_actions()
+        if next_actions is not None:
+            params = edict({
+                "movs": [{
+                    "x_s": next_action[0][0],
+                    "y_s": next_action[0][1],
+                    "n": next_action[1],
+                    "x_t": next_action[2][0],
+                    "y_t": next_action[2][1],
+                } for next_action in next_actions]
+            })
+            player2server.send_MOV(self.sock, params)
         self.update_game()
         self.play()
 
-    def get_next_move(self):
+    def get_next_actions(self):
         return None
 
     def update_game_state(self, headers_to_get):
@@ -67,37 +77,59 @@ class BasePlayer:
         self.game_state["start_position"] = info_received.get("start_position", self.game_state.get("start_position"))
         self.game_state["commands"] = self.game_state.get("commands", {})
         self.game_state["commands"].update(info_received.get("commands", {}))
-        n_v = self.game_state["commands"][self.game_state["start_position"]][1]
-        self.player_id = 1 if n_v != 0 else 2
+        if self.player_id is None:
+            n_v = self.game_state["commands"][self.game_state["start_position"]][1]
+            self.player_id = 1 if n_v != 0 else 2
 
+    def state_to_matrix(self, game_state):
+        H = game_state["height"]
+        W = game_state["width"]
+        matrix = np.zeros((H, W, 3))
+        for x, y in game_state["commands"]:
+            n_h, n_v, n_w = game_state["commands"][(x, y)]
+            matrix[y, x, 0] = n_h
+            matrix[y, x, 1] = n_v
+            matrix[y, x, 2] = n_w
+        return matrix
+    
+    def matrix_to_state(self, matrix):
+        H, W = matrix.shape[:2]
+        commands = {}
+        for y in range(H):
+            for x in range(W):
+                n_h = 0 if matrix[y, x, 0] == 0 else matrix[y, x, 0]
+                n_v = 0 if matrix[y, x, 1] == 0 else matrix[y, x, 1]
+                n_w = 0 if matrix[y, x, 2] == 0 else matrix[y, x, 2]
+                commands[(x, y)] = (n_h, n_v, n_w)
+        return { "height": H, "width": W, "commands": commands }
 
-    def get_possible_moves(self):
-        H = self.game_state["height"]
-        W = self.game_state["width"]
+    def get_possible_actions(self, game_state):
+        H = game_state["height"]
+        W = game_state["width"]
 
-        possible_moves = []
-        for x, y in self.game_state["commands"]:
+        possible_actions = []
+        for x, y in game_state["commands"]:
             source = (x, y)
-            number = self.game_state["commands"][source][self.player_id]
+            number = game_state["commands"][source][self.player_id]
             if number:
                 if y > 0:
-                    possible_moves.append((source, number, (x, y-1)))
+                    possible_actions.append([(source, number, (x, y-1))])
                 if y < H - 1:
-                    possible_moves.append((source, number, (x, y+1)))
+                    possible_actions.append([(source, number, (x, y+1))])
 
                 if x > 0:
-                    possible_moves.append((source, number, (x-1, y)))
+                    possible_actions.append([(source, number, (x-1, y))])
                     if y > 0:
-                        possible_moves.append((source, number, (x-1, y-1)))
+                        possible_actions.append([(source, number, (x-1, y-1))])
                     if y < H - 1:
-                        possible_moves.append((source, number, (x-1, y+1)))
+                        possible_actions.append([(source, number, (x-1, y+1))])
                 
                 if x < W - 1:
-                    possible_moves.append((source, number, (x+1, y)))
+                    possible_actions.append([(source, number, (x+1, y))])
                     if y > 0:
-                        possible_moves.append((source, number, (x+1, y-1)))
+                        possible_actions.append([(source, number, (x+1, y-1))])
                     if y < H - 1:
-                        possible_moves.append((source, number, (x+1, y+1)))
+                        possible_actions.append([(source, number, (x+1, y+1))])
 
-        return possible_moves
+        return possible_actions
         
