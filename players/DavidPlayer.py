@@ -29,60 +29,87 @@ class DavidPlayer(BasePlayer):
     # Heuristic function #
     ######################
 
-    def heuristic_value(self, game_state):
-        player_id = self.player_id
-        ennemy_id = 3 - player_id
-        total_population = self.get_total_population(game_state)
-        player_population = 1. * self.get_total_population(game_state, filter_id=player_id) / total_population
-        ennemy_population = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_population
-        return player_population * 100 - ennemy_population * 10
+    def heuristic_value(self, game_state, player_id):
+        # Game finish
+        game_finish, winner = self.game_is_finished(game_state, player_id)
+        if game_finish:
+            return winner * float("inf")
 
-    def get_total_population(self, game_state, filter_id=None):
-        total = 0
-        for coord in game_state["commands"]:
-            if filter_id is not None:
-                total += game_state["commands"][coord][filter_id]
-            else:
-                total += sum(game_state["commands"][coord])
-        return total
+        # IDs
+        ennemy_id = 3 - player_id
+
+        # Compute all positions and populations
+        human_positions = []; human_populations = []
+        player_positions = []; player_populations = []
+        ennemy_positions = []; ennemy_populations = []
+        for coords in game_state["commands"]:
+            if game_state["commands"][coords][0] > 0:
+                human_positions.append(coords)
+                human_populations.append(game_state["commands"][coords][0])
+            if game_state["commands"][coords][player_id] > 0:
+                player_positions.append(coords)
+                player_populations.append(game_state["commands"][coords][player_id])
+            if game_state["commands"][coords][ennemy_id] > 0:
+                ennemy_positions.append(coords)
+                ennemy_populations.append(game_state["commands"][coords][ennemy_id])
+        
+        # Compute populations
+        total_pop = sum(human_populations) + sum(player_populations) + sum(ennemy_populations)
+        player_pop_value = 1. * sum(player_populations) / total_pop
+        ennemy_pop_value = 1. * sum(ennemy_populations) / total_pop
+        pop_value = player_pop_value * 100 - ennemy_pop_value * 50
+
+        # human - player & human - ennemy distances
+        def compute_human_creature_value(human_positions, human_populations, creature_positions, creature_populations):
+            human_creature_distance_matrix = self.compute_distance_matrix(human_positions, creature_positions)
+            human_creature_pop_matrix = self.compute_distance_matrix(human_populations, creature_populations, dist_func=lambda x: 1 if x == 0 else -np.sign(x))
+            human_creature_matrix = 2. / (human_creature_distance_matrix + 1e-16) + human_creature_pop_matrix
+            human_creature_value = 0 if np.prod(human_creature_matrix.shape) == 0 else np.max(human_creature_matrix)
+            return human_creature_value
+        human_player_value = compute_human_creature_value(human_positions, human_populations, player_positions, player_populations)
+        human_ennemy_value = compute_human_creature_value(human_positions, human_populations, ennemy_positions, ennemy_populations)
+        dist_pop_value = human_player_value * 100 - human_ennemy_value * 50
+
+        return pop_value + dist_pop_value
+
+    def compute_distance_matrix(self, positions1, positions2, dist_func=np.linalg.norm):
+        distance_matrix = np.zeros((len(positions1), len(positions2)))
+        for i, vect1 in enumerate(positions1):
+            for j, vect2 in enumerate(positions2):
+                distance_matrix[i, j] = dist_func(np.array(vect1) - np.array(vect2))
+        return distance_matrix
 
     #####################
     # MiniMax algorithm #
     #####################
 
-    def best_move(self, player_id, depth=3):
-        possible_actions = self.get_possible_actions(self.game_state)
+    def best_move(self, player_id, depth=1):
+        possible_actions = self.get_possible_actions(self.game_state, player_id)
         if len(possible_actions) == 0:
             return None
         
-        actions_values = []
         ennemy_id = 3 - player_id
+        best_action = None
+        best_value = -float("inf")
+        np.random.shuffle(possible_actions)
         for action in possible_actions:
             next_state = self.make_action(self.game_state, action, player_id)
-            actions_values.append(-self.search(next_state, ennemy_id, depth))
-
-        actions = [(action, actions_values[i]) for i, action in enumerate(possible_actions)]
-        np.random.shuffle(actions)
-
-        alpha_max = -float("inf")
-        best_action = 0
-
-        for action, alpha in actions:
-            if alpha >= alpha_max:
-                alpha_max = alpha
+            action_value = self.search(next_state, ennemy_id, depth)
+            if action_value > best_value:
+                best_value = action_value
                 best_action = action
         
         return best_action
     
     def search(self, game_state, player_id, depth):
-        possible_actions = self.get_possible_actions(game_state)
+        possible_actions = self.get_possible_actions(game_state, player_id)
         possible_states = []
         for action in possible_actions:
             next_state = self.make_action(game_state, action, player_id)
             possible_states.append(next_state)
         
-        if depth == 0 or len(possible_states) == 0 or self.game_is_finished(game_state)[0]:
-            return self.heuristic_value(game_state)
+        if depth == 0 or len(possible_states) == 0 or self.game_is_finished(game_state, player_id)[0]:
+            return self.heuristic_value(game_state, player_id)
         
         ennemy_id = 3 - player_id
         alpha = max([-self.search(next_state, ennemy_id, depth-1) for next_state in possible_states])
@@ -119,7 +146,7 @@ class DavidPlayer(BasePlayer):
                     # H vs V (resp. W)
                     if n_h * n_v != 0 or n_h * n_w != 0:
                         n_a = max(n_v, n_w)
-                        p = 0.5 * n_a / n_h
+                        p = (0.5 * n_a / n_h) ** 2
                         if np.random.random() < p:
                             attacker_survivors = np.random.binomial(n_a, p)
                             humans_survivors = np.random.binomial(n_h, p)
@@ -134,7 +161,7 @@ class DavidPlayer(BasePlayer):
                     
                     # V vs W
                     elif n_v * n_w != 0:
-                        p = 0.5 * n_v / n_w if n_v <= n_w else 1. * n_v / n_w - 0.5
+                        p = (0.5 * n_v / n_w if n_v <= n_w else 1. * n_v / n_w - 0.5) ** 10
                         if np.random.random() < p:
                             n_v = np.random.binomial(n_v, p)
                             n_w = 0
@@ -146,9 +173,8 @@ class DavidPlayer(BasePlayer):
         
         return new_game_state
 
-    def game_is_finished(self, game_state):
-        player_id = self.player_id
-        ennemy_id = 3 - self.player_id
+    def game_is_finished(self, game_state, player_id):
+        ennemy_id = 3 - player_id
         player_population = 1. * self.get_total_population(game_state, filter_id=player_id)
         ennemy_population = 1. * self.get_total_population(game_state, filter_id=ennemy_id)
         if player_population == 0:
@@ -156,3 +182,12 @@ class DavidPlayer(BasePlayer):
         if ennemy_population == 0:
             return True, 1
         return False, 0
+
+    def get_total_population(self, game_state, filter_id=None):
+        total = 0
+        for coord in game_state["commands"]:
+            if filter_id is not None:
+                total += game_state["commands"][coord][filter_id]
+            else:
+                total += sum(game_state["commands"][coord])
+        return total

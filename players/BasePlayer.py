@@ -100,17 +100,18 @@ class BasePlayer:
                 n_h = 0 if matrix[y, x, 0] == 0 else matrix[y, x, 0]
                 n_v = 0 if matrix[y, x, 1] == 0 else matrix[y, x, 1]
                 n_w = 0 if matrix[y, x, 2] == 0 else matrix[y, x, 2]
-                commands[(x, y)] = (n_h, n_v, n_w)
+                if n_h + n_v + n_w != 0:
+                    commands[(x, y)] = (n_h, n_v, n_w)
         return { "height": H, "width": W, "commands": commands }
 
-    def get_possible_actions(self, game_state):
+    def get_possible_actions(self, game_state, player_id):
         H = game_state["height"]
         W = game_state["width"]
 
         possible_actions = []
         for x, y in game_state["commands"]:
             source = (x, y)
-            number = game_state["commands"][source][self.player_id]
+            number = game_state["commands"][source][player_id]
             if number:
                 if y > 0:
                     possible_actions.append([(source, number, (x, y-1))])
