@@ -112,6 +112,7 @@ class BasePlayer:
         for x, y in game_state["commands"]:
             source = (x, y)
             number = game_state["commands"][source][player_id]
+            
             if number:
                 if y > 0:
                     possible_actions.append([(source, number, (x, y-1))])
