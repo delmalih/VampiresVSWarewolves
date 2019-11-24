@@ -24,7 +24,7 @@ class RandomPlayer(BasePlayer):
         BasePlayer.__init__(self, name, sock)
 
     def get_next_actions(self):
-        possible_actions = self.get_possible_actions(self.game_state)
+        possible_actions = self.get_possible_actions(self.game_state, self.player_id)
         if len(possible_actions) > 0:
             next_actions = possible_actions[np.random.choice(range(len(possible_actions)))]
             return next_actions
