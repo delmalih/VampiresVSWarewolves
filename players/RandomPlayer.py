@@ -23,19 +23,10 @@ class RandomPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
 
-    def get_next_move(self):
-        possible_moves = self.get_possible_moves()
-        if len(possible_moves) > 0:
-            next_moves = [possible_moves[np.random.choice(range(len(possible_moves)))]]
-            params = edict({
-                "movs": [{
-                    "x_s": next_move[0][0],
-                    "y_s": next_move[0][1],
-                    "n": next_move[1],
-                    "x_t": next_move[2][0],
-                    "y_t": next_move[2][1],
-                } for next_move in next_moves]
-            })
-            return params
+    def get_next_actions(self):
+        possible_actions = self.get_possible_actions(self.game_state, self.player_id)
+        if len(possible_actions) > 0:
+            next_actions = possible_actions[np.random.choice(range(len(possible_actions)))]
+            return next_actions
         return None
     

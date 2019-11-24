@@ -38,7 +38,7 @@ def main():
     try:
         args, constants = init_variables()
         sock = utils.connect_to_server(args.host, args.port, args.name, constants)
-        ply = players.RandomPlayer(args.name, sock)
+        ply = players.DavidPlayer(args.name, sock)
         ply.play()
     except KeyboardInterrupt:
         print("Goodbye ! :)")
