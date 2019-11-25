@@ -97,29 +97,29 @@ class BasePlayer:
 
         # Get possible actions
         possible_actions = []
-        for y in range(H):
-            for x in range(W):
-                number = game_state[y, x][player_id]
+        Ys, Xs = np.where(game_state[:, :, player_id])
+        for i in range(len(Xs)):
+            x, y = Xs[i], Ys[i]
+            number = int(game_state[y, x][player_id])
+            if number:
+                if y > 0:
+                    possible_actions.append([((x, y), number, (x, y-1))])
+                if y < H - 1:
+                    possible_actions.append([((x, y), number, (x, y+1))])
 
-                if number:
+                if x > 0:
+                    possible_actions.append([((x, y), number, (x-1, y))])
                     if y > 0:
-                        possible_actions.append([((x, y), number, (x, y-1))])
+                        possible_actions.append([((x, y), number, (x-1, y-1))])
                     if y < H - 1:
-                        possible_actions.append([((x, y), number, (x, y+1))])
-
-                    if x > 0:
-                        possible_actions.append([((x, y), number, (x-1, y))])
-                        if y > 0:
-                            possible_actions.append([((x, y), number, (x-1, y-1))])
-                        if y < H - 1:
-                            possible_actions.append([((x, y), number, (x-1, y+1))])
-                    
-                    if x < W - 1:
-                        possible_actions.append([((x, y), number, (x+1, y))])
-                        if y > 0:
-                            possible_actions.append([((x, y), number, (x+1, y-1))])
-                        if y < H - 1:
-                            possible_actions.append([((x, y), number, (x+1, y+1))])
+                        possible_actions.append([((x, y), number, (x-1, y+1))])
+                
+                if x < W - 1:
+                    possible_actions.append([((x, y), number, (x+1, y))])
+                    if y > 0:
+                        possible_actions.append([((x, y), number, (x+1, y-1))])
+                    if y < H - 1:
+                        possible_actions.append([((x, y), number, (x+1, y+1))])
 
         return possible_actions
         
