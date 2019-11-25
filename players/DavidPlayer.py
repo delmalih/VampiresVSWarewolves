@@ -8,6 +8,7 @@
 import sys
 import numpy as np
 from easydict import EasyDict as edict
+from scipy.stats import multivariate_normal
 
 """" Local """
 from BasePlayer import BasePlayer
@@ -21,8 +22,19 @@ from utils import player2server
 class DavidPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
+        height, width = self.game_state.shape[:2]; k = 5
+        gaussian_matrix = np.array([
+            [
+                2 * np.pi * k * multivariate_normal.pdf([x - width, y - height], mean=np.zeros((2)), cov=k*np.eye(2))
+                for x in range(2 * width)
+            ] for y in range(2 * height)
+        ])
+        self.gaussian_weights = {}
+        for y in range(height):
+            for x in range(width):
+                self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
 
-    def get_next_actions(self, depth=6):
+    def get_next_actions(self, depth=4):
         possible_actions = self.get_possible_actions(self.game_state, self.player_id)
         if len(possible_actions) == 0:
             return None
@@ -68,7 +80,34 @@ class DavidPlayer(BasePlayer):
         ennemy_pop_value = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_pop
         pop_value = player_pop_value - ennemy_pop_value
 
-        return pop_value
+        # More complex features
+        sign_func = lambda x: np.where(x >= 0, 1, 0)
+
+        # human - player distance
+        human_player_dist_val = 0
+        Ys, Xs = np.where(game_state[:, :, player_id] > 0)
+        for i in range(len(Xs)):
+            x = Xs[i]; y = Ys[i]
+            human_player_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func(game_state[y, x, player_id] - game_state[:, :, 0]))
+            human_player_dist_val += np.sum(human_player_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, 0]) / total_pop)
+        
+        # human - ennemy distance
+        human_ennemy_dist_val = 0
+        Ys, Xs = np.where(game_state[:, :, ennemy_id] > 0)
+        for i in range(len(Xs)):
+            x = Xs[i]; y = Ys[i]
+            human_ennemy_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func(game_state[y, x, ennemy_id] - game_state[:, :, 0]))
+            human_ennemy_dist_val += np.sum(human_ennemy_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, 0]) / total_pop)
+        
+        # player - ennemy distance
+        player_ennemy_dist_val = 0
+        Ys, Xs = np.where(game_state[:, :, player_id] > 0)
+        for i in range(len(Xs)):
+            x = Xs[i]; y = Ys[i]
+            player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func(game_state[y, x, player_id] - 1.5*game_state[:, :, 0]))
+            player_ennemy_dist_val += np.sum(player_ennemy_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, ennemy_id]) / total_pop)
+
+        return pop_value * 1000 + player_ennemy_dist_val * 10 + human_player_dist_val - human_ennemy_dist_val
 
     #############
     # Algorithm #

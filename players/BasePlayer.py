@@ -90,18 +90,6 @@ class BasePlayer:
             matrix[y, x, 1] = n_v
             matrix[y, x, 2] = n_w
         return matrix
-    
-    # def matrix_to_state(self, matrix):
-    #     H, W = matrix.shape[:2]
-    #     commands = {}
-    #     for y in range(H):
-    #         for x in range(W):
-    #             n_h = 0 if matrix[y, x, 0] == 0 else matrix[y, x, 0]
-    #             n_v = 0 if matrix[y, x, 1] == 0 else matrix[y, x, 1]
-    #             n_w = 0 if matrix[y, x, 2] == 0 else matrix[y, x, 2]
-    #             if n_h + n_v + n_w != 0:
-    #                 commands[(x, y)] = (n_h, n_v, n_w)
-    #     return { "height": H, "width": W, "commands": commands }
 
     def get_possible_actions(self, game_state, player_id):
         # Get game limits
