@@ -9,6 +9,7 @@ import sys
 import numpy as np
 from easydict import EasyDict as edict
 from scipy.stats import multivariate_normal
+import scipy.special
 
 """" Local """
 from BasePlayer import BasePlayer
@@ -34,7 +35,7 @@ class DavidPlayer(BasePlayer):
             for x in range(width):
                 self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
 
-    def get_next_actions(self, depth=4):
+    def get_next_actions(self, depth=3):
         possible_actions = self.get_possible_actions(self.game_state, self.player_id)
         if len(possible_actions) == 0:
             return None
@@ -51,14 +52,16 @@ class DavidPlayer(BasePlayer):
         # Looping over all possible actions
         for action in possible_actions:
             # Compute next state
-            next_state = self.make_action(self.game_state, action, self.player_id)
+            next_states, next_probabilities = self.make_action(self.game_state, action, self.player_id)
 
             # Handling game end
-            game_finish, winner = self.game_is_finished(next_state, self.player_id)
-            if game_finish and winner == 1:
-                return action
+            if len(next_states) == 1:
+                game_finish, winner = self.game_is_finished(next_states[0], self.player_id)
+                if game_finish and winner == 1:
+                    return action
 
-            action_value = self.max_value(next_state, self.player_id, depth, alpha, beta)
+            # Choose the best action
+            action_value = [next_probabilities[i] * self.max_value(next_state, self.player_id, depth, alpha, beta) for i, next_state in enumerate(next_states)]
             if action_value > best_value:
                 best_value = action_value
                 best_action = action
@@ -107,7 +110,7 @@ class DavidPlayer(BasePlayer):
             player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func(game_state[y, x, player_id] - 1.5*game_state[:, :, 0]))
             player_ennemy_dist_val += np.sum(player_ennemy_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, ennemy_id]) / total_pop)
 
-        return pop_value * 1000 + player_ennemy_dist_val * 10 + human_player_dist_val - human_ennemy_dist_val
+        return pop_value * 1000 + player_ennemy_dist_val * 10 + (human_player_dist_val - human_ennemy_dist_val)
 
     #############
     # Algorithm #
@@ -120,15 +123,15 @@ class DavidPlayer(BasePlayer):
         # Game finish
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
-            return winner * float("inf")
+            return winner * 10000
         if depth == 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
         # Compute max value
         value = -float("inf")
         for action in possible_actions:
-            next_state = self.make_action(game_state, action, player_id)
-            value = max(value, self.min_value(next_state, player_id, depth-1, alpha, beta))
+            next_states, next_probabilities = self.make_action(game_state, action, player_id)
+            value = max(value, sum([next_probabilities[i] * self.min_value(next_state, player_id, depth-1, alpha, beta) for i, next_state in enumerate(next_states)]))
             if value >= beta:
                 return value
             alpha = max(alpha, value)
@@ -142,15 +145,15 @@ class DavidPlayer(BasePlayer):
         # Game finish
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
-            return winner * float("inf")
+            return winner * 10000
         if depth == 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
         # Compute max value
         value = float("inf")
         for action in possible_actions:
-            next_state = self.make_action(game_state, action, player_id)
-            value = min(value, self.max_value(next_state, player_id, depth-1, alpha, beta))
+            next_states, next_probabilities = self.make_action(game_state, action, player_id)
+            value = min(value, sum([next_probabilities[i] * self.max_value(next_state, player_id, depth-1, alpha, beta) for i, next_state in enumerate(next_states)]))
             if value <= alpha:
                 return value
             beta = min(beta, value)
@@ -162,6 +165,8 @@ class DavidPlayer(BasePlayer):
     ###################
 
     def make_action(self, game_state, actions, player_id):
+        all_final_states = []
+        all_probabilities = []
         new_game_state = game_state.copy()
         for action in actions:
             (x_s, y_s), number, (x_t, y_t) = action
@@ -170,54 +175,76 @@ class DavidPlayer(BasePlayer):
             
             n_h, n_v, n_w = new_game_state[y_t, x_t]
 
-            # Battle handling
-            if n_h * n_v != 0 or n_h * n_w != 0 or n_v * n_w != 0:
+            # V vs W battle
+            if n_v * n_w != 0:
+                n_player = n_v if player_id == 1 else n_w
+                n_ennemy = n_w if player_id == 2 else n_v
+                if n_player >= 1.5 * n_ennemy:
+                    new_game_state[y_t, x_t, 3 - player_id] = 0
+                    all_final_states.append(new_game_state)
+                    all_probabilities.append(1.0)
+                elif n_ennemy >= 1.5 * n_player:
+                    new_game_state[y_t, x_t, player_id] = 0
+                    all_final_states.append(new_game_state)
+                    all_probabilities.append(1.0)
+                else:
+                    p = 0.5 * n_player / n_ennemy if n_player <= n_ennemy else 1. * n_player / n_ennemy - 0.5
+                    current_state = new_game_state.copy()
+                    current_state[y_t, x_t, 1] = 0
+                    current_state[y_t, x_t, 2] = 0
+                    all_final_states.append(current_state)
+                    all_probabilities.append(p * (1 - p) ** n_player + (1 - p) * p ** n_ennemy)
+                    for tmp_n_player in range(1, int(n_player + 1)):
+                        current_state = new_game_state.copy()
+                        current_state[y_t, x_t, player_id] = tmp_n_player
+                        current_state[y_t, x_t, 3 - player_id] = 0
+                        all_final_states.append(current_state)
+                        all_probabilities.append(p * scipy.special.binom(n_player, tmp_n_player) * (p ** tmp_n_player) * ((1 - p) ** (n_player - tmp_n_player)))
+                    for tmp_n_ennemy in range(1, int(n_ennemy + 1)):
+                        current_state = new_game_state.copy()
+                        current_state[y_t, x_t, player_id] = 0
+                        current_state[y_t, x_t, 3 - player_id] = tmp_n_ennemy
+                        all_final_states.append(current_state)
+                        all_probabilities.append((1 - p) * scipy.special.binom(n_ennemy, tmp_n_ennemy) * ((1 - p) ** tmp_n_ennemy) * (p ** (n_ennemy - tmp_n_ennemy)))
 
-                # Battles H vs V (resp. W) and Q(H) < Q(V (resp. W))
+            # Battles H vs V (or W)
+            elif n_h * n_v != 0 or n_h * n_w != 0:
                 if (n_v * n_h != 0 and n_h <= n_v) or (n_w * n_h != 0 and n_h <= n_w):
                     if n_v != 0: n_v += n_h
                     else: n_w += n_h
                     n_h = 0
-                
-                # Battle V vs W and (Q(V) >= 1.5 Q(W) or Q(W) >= 1.5 Q(V))
-                elif n_w * n_v != 0 and (n_v >= 1.5 * n_w or n_w >= 1.5 * n_v):
-                    if n_v == max(n_v, n_w): n_w = 0
-                    if n_w == max(n_v, n_w): n_v = 0
-                
-                # Random battle
+                    new_game_state[y_t, x_t, 0] = n_h
+                    new_game_state[y_t, x_t, 1] = n_v
+                    new_game_state[y_t, x_t, 2] = n_w
+                    all_final_states.append(new_game_state)
+                    all_probabilities.append(1.0)
                 else:
-
-                    # H vs V (resp. W)
-                    if n_h * n_v != 0 or n_h * n_w != 0:
-                        n_a = max(n_v, n_w)
-                        p = (0.5 * n_a / n_h) ** 2
-                        if np.random.random() < p:
-                            attacker_survivors = np.random.binomial(n_a, p)
-                            humans_survivors = np.random.binomial(n_h, p)
-                            if n_v != 0: n_v = attacker_survivors + humans_survivors
-                            else: n_w = attacker_survivors + humans_survivors
-                            n_h = 0
-                        else:
-                            humans_survivors = np.random.binomial(n_h, 1 - p)
-                            if n_v != 0: n_v = 0
-                            else: n_w = 0
-                            n_h = humans_survivors
-                    
-                    # V vs W
-                    elif n_v * n_w != 0:
-                        p = (0.5 * n_v / n_w if n_v <= n_w else 1. * n_v / n_w - 0.5) ** 10
-                        if np.random.random() < p:
-                            n_v = np.random.binomial(n_v, p)
-                            n_w = 0
-                        else:
-                            n_v = 0
-                            n_w = np.random.binomial(n_w, p)
-
-            new_game_state[y_t, x_t, 0] = n_h
-            new_game_state[y_t, x_t, 1] = n_v
-            new_game_state[y_t, x_t, 2] = n_w
+                    n_a = max(n_v, n_w)
+                    p = 0.5 * n_a / n_h
+                    current_state = new_game_state.copy()
+                    current_state[y_t, x_t, 1] = 0
+                    current_state[y_t, x_t, 2] = 0
+                    all_final_states.append(current_state)
+                    all_probabilities.append(p * (1 - p) ** (n_a + n_h) + (1 - p) * p ** n_h)
+                    for tmp_n_a in range(1, int(n_a + n_h + 1)):
+                        current_state = new_game_state.copy()
+                        current_state[y_t, x_t, 0] = 0
+                        current_state[y_t, x_t, player_id] = tmp_n_a
+                        all_final_states.append(current_state)
+                        all_probabilities.append(p * scipy.special.binom(n_a + n_h, tmp_n_a) * (p ** tmp_n_a) * ((1 - p) ** (n_a + n_h - tmp_n_a)))
+                    for tmp_n_h in range(1, int(n_h + 1)):
+                        current_state = new_game_state.copy()
+                        current_state[y_t, x_t, 0] = tmp_n_h
+                        current_state[y_t, x_t, player_id] = 0
+                        all_final_states.append(current_state)
+                        all_probabilities.append((1 - p) * scipy.special.binom(n_h, tmp_n_h) * ((1 - p) ** tmp_n_h) * (p ** (n_h - tmp_n_h)))
+            
+            # No battle
+            else:
+                all_final_states.append(new_game_state)
+                all_probabilities.append(1.0)
         
-        return new_game_state
+        return all_final_states, all_probabilities
 
     def game_is_finished(self, game_state, player_id):
         ennemy_id = 3 - player_id
