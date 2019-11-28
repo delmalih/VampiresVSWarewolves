@@ -23,10 +23,10 @@ from utils import player2server
 class DavidPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
-        height, width = self.game_state.shape[:2]; k = 5
+        height, width = self.game_state.shape[:2]; k = 3
         gaussian_matrix = np.array([
             [
-                2 * np.pi * k * multivariate_normal.pdf([x - width, y - height], mean=np.zeros((2)), cov=k*np.eye(2))
+                np.sqrt(2 * np.pi * k) * multivariate_normal.pdf(max(abs(x - width), abs(y - height)), mean=0, cov=k)
                 for x in range(2 * width)
             ] for y in range(2 * height)
         ])
@@ -83,32 +83,39 @@ class DavidPlayer(BasePlayer):
         ennemy_pop_value = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_pop
         pop_value = player_pop_value - ennemy_pop_value
 
+        # Game end
+        if player_pop_value == 0:
+            return -100000
+        elif ennemy_pop_value == 0:
+            return 100000
+
         # More complex features
-        sign_func = lambda x: np.where(x >= 0, 1, 0)
+        sign_func_human = lambda x: np.where(x >= 0, 1, 0)
+        sign_func_ennemy = lambda x: np.where(x >= 0, 1, -1)
 
         # human - player distance
         human_player_dist_val = 0
         Ys, Xs = np.where(game_state[:, :, player_id] > 0)
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
-            human_player_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func(game_state[y, x, player_id] - game_state[:, :, 0]))
-            human_player_dist_val += np.sum(human_player_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, 0]) / total_pop)
+            human_player_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, player_id] - game_state[:, :, 0]))
+            human_player_dist_val += np.mean(human_player_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
         
         # human - ennemy distance
         human_ennemy_dist_val = 0
         Ys, Xs = np.where(game_state[:, :, ennemy_id] > 0)
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
-            human_ennemy_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func(game_state[y, x, ennemy_id] - game_state[:, :, 0]))
-            human_ennemy_dist_val += np.sum(human_ennemy_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, 0]) / total_pop)
+            human_ennemy_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, ennemy_id] - game_state[:, :, 0]))
+            human_ennemy_dist_val += np.mean(human_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
         
         # player - ennemy distance
         player_ennemy_dist_val = 0
         Ys, Xs = np.where(game_state[:, :, player_id] > 0)
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
-            player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func(game_state[y, x, player_id] - 1.5*game_state[:, :, 0]))
-            player_ennemy_dist_val += np.sum(player_ennemy_diff * self.gaussian_weights[(x, y)] * (1. * game_state[:, :, ennemy_id]) / total_pop)
+            player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func_ennemy(game_state[y, x, player_id] - 1.5 * game_state[:, :, ennemy_id]))
+            player_ennemy_dist_val += np.mean(player_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, ennemy_id] / total_pop))
 
         return pop_value * 1000 + player_ennemy_dist_val * 10 + (human_player_dist_val - human_ennemy_dist_val)
 
@@ -123,8 +130,8 @@ class DavidPlayer(BasePlayer):
         # Game finish
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
-            return winner * 10000
-        if depth == 0 or len(possible_actions) == 0:
+            return winner * 100000
+        if depth <= 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
         # Compute max value
@@ -146,7 +153,7 @@ class DavidPlayer(BasePlayer):
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
             return winner * 10000
-        if depth == 0 or len(possible_actions) == 0:
+        if depth <= 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
         # Compute max value
@@ -178,9 +185,10 @@ class DavidPlayer(BasePlayer):
             # V vs W battle
             if n_v * n_w != 0:
                 n_player = n_v if player_id == 1 else n_w
-                n_ennemy = n_w if player_id == 2 else n_v
+                n_ennemy = n_w if player_id == 1 else n_v
+                ennemy_id = 3 - player_id
                 if n_player >= 1.5 * n_ennemy:
-                    new_game_state[y_t, x_t, 3 - player_id] = 0
+                    new_game_state[y_t, x_t, ennemy_id] = 0
                     all_final_states.append(new_game_state)
                     all_probabilities.append(1.0)
                 elif n_ennemy >= 1.5 * n_player:
@@ -197,13 +205,13 @@ class DavidPlayer(BasePlayer):
                     for tmp_n_player in range(1, int(n_player + 1)):
                         current_state = new_game_state.copy()
                         current_state[y_t, x_t, player_id] = tmp_n_player
-                        current_state[y_t, x_t, 3 - player_id] = 0
+                        current_state[y_t, x_t, ennemy_id] = 0
                         all_final_states.append(current_state)
                         all_probabilities.append(p * scipy.special.binom(n_player, tmp_n_player) * (p ** tmp_n_player) * ((1 - p) ** (n_player - tmp_n_player)))
                     for tmp_n_ennemy in range(1, int(n_ennemy + 1)):
                         current_state = new_game_state.copy()
                         current_state[y_t, x_t, player_id] = 0
-                        current_state[y_t, x_t, 3 - player_id] = tmp_n_ennemy
+                        current_state[y_t, x_t, ennemy_id] = tmp_n_ennemy
                         all_final_states.append(current_state)
                         all_probabilities.append((1 - p) * scipy.special.binom(n_ennemy, tmp_n_ennemy) * ((1 - p) ** tmp_n_ennemy) * (p ** (n_ennemy - tmp_n_ennemy)))
 

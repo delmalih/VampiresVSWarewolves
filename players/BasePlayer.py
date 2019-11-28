@@ -28,11 +28,15 @@ class BasePlayer:
         self.start_game()
     
     def start_game(self):
+        # Start time
+        self.time_passed = 0
+
         # Send NME
         player2server.send_NME(self.sock, edict(name = self.name))
 
         # Getting data
         self.update_game_state(["SET", "HUM", "HME", "MAP"])
+        print(self.player_id)
     
     def update_game(self):
         self.update_game_state(["UPD"])
@@ -51,6 +55,7 @@ class BasePlayer:
             })
             player2server.send_MOV(self.sock, params)
         self.update_game()
+        self.time_passed += 2
         self.play()
 
     def get_next_actions(self):
