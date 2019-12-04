@@ -36,7 +36,7 @@ class BasePlayer:
 
         # Getting data
         self.update_game_state(["SET", "HUM", "HME", "MAP"])
-        print(self.player_id)
+        self.update_game()
     
     def update_game(self):
         self.update_game_state(["UPD"])

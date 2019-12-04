@@ -23,7 +23,7 @@ from utils import player2server
 class DavidPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
-        height, width = self.game_state.shape[:2]; k = 3
+        height, width = self.game_state.shape[:2]; k = 10
         gaussian_matrix = np.array([
             [
                 np.sqrt(2 * np.pi * k) * multivariate_normal.pdf(max(abs(x - width), abs(y - height)), mean=0, cov=k)
@@ -35,7 +35,7 @@ class DavidPlayer(BasePlayer):
             for x in range(width):
                 self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
 
-    def get_next_actions(self, depth=3):
+    def get_next_actions(self, depth=4):
         possible_actions = self.get_possible_actions(self.game_state, self.player_id)
         if len(possible_actions) == 0:
             return None
@@ -85,9 +85,9 @@ class DavidPlayer(BasePlayer):
 
         # Game end
         if player_pop_value == 0:
-            return -100000
+            return -10000
         elif ennemy_pop_value == 0:
-            return 100000
+            return 10000
 
         # More complex features
         sign_func_human = lambda x: np.where(x >= 0, 1, 0)
@@ -99,7 +99,7 @@ class DavidPlayer(BasePlayer):
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
             human_player_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, player_id] - game_state[:, :, 0]))
-            human_player_dist_val += np.mean(human_player_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
+            human_player_dist_val += np.max(human_player_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
         
         # human - ennemy distance
         human_ennemy_dist_val = 0
@@ -107,7 +107,7 @@ class DavidPlayer(BasePlayer):
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
             human_ennemy_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, ennemy_id] - game_state[:, :, 0]))
-            human_ennemy_dist_val += np.mean(human_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
+            human_ennemy_dist_val += np.max(human_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
         
         # player - ennemy distance
         player_ennemy_dist_val = 0
@@ -115,7 +115,7 @@ class DavidPlayer(BasePlayer):
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
             player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func_ennemy(game_state[y, x, player_id] - 1.5 * game_state[:, :, ennemy_id]))
-            player_ennemy_dist_val += np.mean(player_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, ennemy_id] / total_pop))
+            player_ennemy_dist_val += np.max(player_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, ennemy_id] / total_pop))
 
         return pop_value * 1000 + player_ennemy_dist_val * 10 + (human_player_dist_val - human_ennemy_dist_val)
 
@@ -181,71 +181,57 @@ class DavidPlayer(BasePlayer):
             new_game_state[y_t, x_t, player_id] += number
             
             n_h, n_v, n_w = new_game_state[y_t, x_t]
+            n_player = n_v if player_id == 1 else n_w
+            n_ennemy = n_w if player_id == 1 else n_v
+            ennemy_id = 3 - player_id
 
-            # V vs W battle
-            if n_v * n_w != 0:
-                n_player = n_v if player_id == 1 else n_w
-                n_ennemy = n_w if player_id == 1 else n_v
-                ennemy_id = 3 - player_id
+            # Player vs Ennemy battle
+            if n_player * n_ennemy != 0:
                 if n_player >= 1.5 * n_ennemy:
                     new_game_state[y_t, x_t, ennemy_id] = 0
                     all_final_states.append(new_game_state)
                     all_probabilities.append(1.0)
-                elif n_ennemy >= 1.5 * n_player:
+                elif n_player <= 1.5 * n_ennemy:
                     new_game_state[y_t, x_t, player_id] = 0
                     all_final_states.append(new_game_state)
                     all_probabilities.append(1.0)
                 else:
-                    p = 0.5 * n_player / n_ennemy if n_player <= n_ennemy else 1. * n_player / n_ennemy - 0.5
+                    # Probability
+                    p = 0.5 * n_player / n_ennemy if n_player < n_ennemy else 1. * n_player / n_ennemy - 0.5
+                    # Player loses
                     current_state = new_game_state.copy()
-                    current_state[y_t, x_t, 1] = 0
-                    current_state[y_t, x_t, 2] = 0
+                    current_state[y_t, x_t, player_id] = 0
                     all_final_states.append(current_state)
-                    all_probabilities.append(p * (1 - p) ** n_player + (1 - p) * p ** n_ennemy)
-                    for tmp_n_player in range(1, int(n_player + 1)):
-                        current_state = new_game_state.copy()
-                        current_state[y_t, x_t, player_id] = tmp_n_player
-                        current_state[y_t, x_t, ennemy_id] = 0
-                        all_final_states.append(current_state)
-                        all_probabilities.append(p * scipy.special.binom(n_player, tmp_n_player) * (p ** tmp_n_player) * ((1 - p) ** (n_player - tmp_n_player)))
-                    for tmp_n_ennemy in range(1, int(n_ennemy + 1)):
-                        current_state = new_game_state.copy()
-                        current_state[y_t, x_t, player_id] = 0
-                        current_state[y_t, x_t, ennemy_id] = tmp_n_ennemy
-                        all_final_states.append(current_state)
-                        all_probabilities.append((1 - p) * scipy.special.binom(n_ennemy, tmp_n_ennemy) * ((1 - p) ** tmp_n_ennemy) * (p ** (n_ennemy - tmp_n_ennemy)))
+                    all_probabilities.append(1.0 - p + p * (1. - p) ** n_player)
+                    # Player wins
+                    current_state = new_game_state.copy()
+                    current_state[y_t, x_t, player_id] = n_player * p
+                    all_final_states.append(current_state)
+                    all_probabilities.append(p * (1. - (1. - p) ** n_player))
 
-            # Battles H vs V (or W)
-            elif n_h * n_v != 0 or n_h * n_w != 0:
-                if (n_v * n_h != 0 and n_h <= n_v) or (n_w * n_h != 0 and n_h <= n_w):
-                    if n_v != 0: n_v += n_h
-                    else: n_w += n_h
-                    n_h = 0
-                    new_game_state[y_t, x_t, 0] = n_h
-                    new_game_state[y_t, x_t, 1] = n_v
-                    new_game_state[y_t, x_t, 2] = n_w
+            # Human vs Player (or Ennemy) battle
+            elif n_h * n_player != 0 or n_h * n_ennemy != 0:
+                if (n_h * n_player != 0 and n_h <= n_player) or (n_h * n_ennemy != 0 and n_h <= n_ennemy):
+                    new_game_state[y_t, x_t, 0] = 0
+                    new_game_state[y_t, x_t, player_id] = n_player + n_h if n_player != 0 else n_player
+                    new_game_state[y_t, x_t, ennemy_id] = n_ennemy + n_h if n_ennemy != 0 else n_ennemy
                     all_final_states.append(new_game_state)
                     all_probabilities.append(1.0)
                 else:
-                    n_a = max(n_v, n_w)
-                    p = 0.5 * n_a / n_h
+                    # Probability
+                    creature_id = player_id if n_player != 0 else ennemy_id
+                    n_creature = max(n_player, n_ennemy)
+                    p = 0.5 * n_creature / n_h
+                    # Creature loses
                     current_state = new_game_state.copy()
-                    current_state[y_t, x_t, 1] = 0
-                    current_state[y_t, x_t, 2] = 0
+                    current_state[y_t, x_t, creature_id] = 0
                     all_final_states.append(current_state)
-                    all_probabilities.append(p * (1 - p) ** (n_a + n_h) + (1 - p) * p ** n_h)
-                    for tmp_n_a in range(1, int(n_a + n_h + 1)):
-                        current_state = new_game_state.copy()
-                        current_state[y_t, x_t, 0] = 0
-                        current_state[y_t, x_t, player_id] = tmp_n_a
-                        all_final_states.append(current_state)
-                        all_probabilities.append(p * scipy.special.binom(n_a + n_h, tmp_n_a) * (p ** tmp_n_a) * ((1 - p) ** (n_a + n_h - tmp_n_a)))
-                    for tmp_n_h in range(1, int(n_h + 1)):
-                        current_state = new_game_state.copy()
-                        current_state[y_t, x_t, 0] = tmp_n_h
-                        current_state[y_t, x_t, player_id] = 0
-                        all_final_states.append(current_state)
-                        all_probabilities.append((1 - p) * scipy.special.binom(n_h, tmp_n_h) * ((1 - p) ** tmp_n_h) * (p ** (n_h - tmp_n_h)))
+                    all_probabilities.append(1.0 - p + p * (1. - p) ** (n_creature + n_h))
+                    # Creature wins
+                    current_state = new_game_state.copy()
+                    current_state[y_t, x_t, creature_id] = (n_creature + n_h) * p
+                    all_final_states.append(current_state)
+                    all_probabilities.append(p * (1. - (1. - p) ** (n_creature + n_h)))
             
             # No battle
             else:
