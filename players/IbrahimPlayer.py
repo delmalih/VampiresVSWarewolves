@@ -8,8 +8,7 @@
 import sys
 import numpy as np
 from easydict import EasyDict as edict
-from scipy.stats import multivariate_normal
-import scipy.special
+import time
 
 """" Local """
 from BasePlayer import BasePlayer
@@ -23,17 +22,6 @@ from utils import player2server
 class IbrahimPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
-        # height, width = self.game_state.shape[:2]; k = 10
-        # gaussian_matrix = np.array([
-        #     [
-        #         np.sqrt(2 * np.pi * k) * multivariate_normal.pdf(max(abs(x - width), abs(y - height)), mean=0, cov=k)
-        #         for x in range(2 * width)
-        #     ] for y in range(2 * height)
-        # ])
-        # self.gaussian_weights = {}
-        # for y in range(height):
-        #     for x in range(width):
-        #         self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
 
     def get_next_actions(self, depth=4):
         possible_actions = self.get_possible_actions(self.game_state, self.player_id)
@@ -49,6 +37,7 @@ class IbrahimPlayer(BasePlayer):
         alpha = -float("inf")
         beta = float("inf")
 
+        tmp = time.time()
         # Looping over all possible actions
         for action in possible_actions:
             # Compute next state
@@ -61,12 +50,12 @@ class IbrahimPlayer(BasePlayer):
                     return action
 
             # Choose the best action
-            action_value = [next_probabilities[i] * self.max_value(next_state, self.player_id, depth, alpha, beta) for i, next_state in enumerate(next_states)]
+            action_value = sum([next_probabilities[i] * self.max_value(next_state, self.player_id, depth, alpha, beta) for i, next_state in enumerate(next_states)])
             if action_value > best_value:
                 best_value = action_value
                 best_action = action
         
-        print(best_value, best_action)
+        print(best_value, time.time() - tmp)
         return best_action
     
     ######################
@@ -117,14 +106,14 @@ class IbrahimPlayer(BasePlayer):
 
         # Computing scores
         human_player_scores = compute_scores_maps(game_state, player_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
-        human_ennemy_scores = compute_scores_maps(game_state, ennemy_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
-        player_ennemy_scores = compute_scores_maps(game_state, player_id, ennemy_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
-        ennemy_player_scores = compute_scores_maps(game_state, ennemy_id, player_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
         human_player_scores = np.max(human_player_scores, axis=0)
+        human_ennemy_scores = compute_scores_maps(game_state, ennemy_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
         human_ennemy_scores = np.max(human_ennemy_scores, axis=0)
-        human_scores = np.max(human_player_scores - human_ennemy_scores)
+        player_ennemy_scores = compute_scores_maps(game_state, player_id, ennemy_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
         player_ennemy_scores = np.max(player_ennemy_scores)
+        ennemy_player_scores = compute_scores_maps(game_state, ennemy_id, player_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
         ennemy_player_scores = np.max(ennemy_player_scores)
+        human_scores = np.max(human_player_scores - human_ennemy_scores)
 
         return population_score * 1000 + (player_ennemy_scores - ennemy_player_scores) * 10 + human_scores
 
@@ -139,7 +128,7 @@ class IbrahimPlayer(BasePlayer):
         # Game finish
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
-            return winner * 10000
+            return winner * 100000
         if depth <= 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
@@ -279,22 +268,33 @@ class IbrahimPlayer(BasePlayer):
             number = int(game_state[y, x][player_id])
             if number:
                 if y > 0:
-                    possible_actions.append([((x, y), number, (x, y-1))])
+                    if np.sum(game_state[:y, :, :]) != 0:
+                        possible_actions.append([((x, y), number, (x, y-1))])
                 if y < H - 1:
-                    possible_actions.append([((x, y), number, (x, y+1))])
+                    if np.sum(game_state[y+1:, :, :]) != 0:
+                        possible_actions.append([((x, y), number, (x, y+1))])
 
                 if x > 0:
-                    possible_actions.append([((x, y), number, (x-1, y))])
+                    if np.sum(game_state[:, :x, :]) != 0:
+                        possible_actions.append([((x, y), number, (x-1, y))])
                     if y > 0:
-                        possible_actions.append([((x, y), number, (x-1, y-1))])
+                        if np.sum(game_state[:y, :x, :]) != 0:
+                            possible_actions.append([((x, y), number, (x-1, y-1))])
                     if y < H - 1:
-                        possible_actions.append([((x, y), number, (x-1, y+1))])
+                        if np.sum(game_state[y+1:, :x, :]) != 0:
+                            possible_actions.append([((x, y), number, (x-1, y+1))])
                 
                 if x < W - 1:
-                    possible_actions.append([((x, y), number, (x+1, y))])
+                    if np.sum(game_state[:, x+1:, :]) != 0:
+                        possible_actions.append([((x, y), number, (x+1, y))])
                     if y > 0:
-                        possible_actions.append([((x, y), number, (x+1, y-1))])
+                        if np.sum(game_state[:y, x+1:, :]) != 0:
+                            possible_actions.append([((x, y), number, (x+1, y-1))])
                     if y < H - 1:
-                        possible_actions.append([((x, y), number, (x+1, y+1))])
+                        if np.sum(game_state[y+1:, x+1:, :]) != 0:
+                            possible_actions.append([((x, y), number, (x+1, y+1))])
 
         return possible_actions
+    
+    def hash_state(self, game_state, player_id):
+        return hash(str(game_state) + str(player_id))

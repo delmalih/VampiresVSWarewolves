@@ -10,6 +10,7 @@ import numpy as np
 from easydict import EasyDict as edict
 from scipy.stats import multivariate_normal
 import scipy.special
+import time
 
 """" Local """
 from BasePlayer import BasePlayer
@@ -49,6 +50,7 @@ class DavidPlayer(BasePlayer):
         alpha = -float("inf")
         beta = float("inf")
 
+        tmp = time.time()
         # Looping over all possible actions
         for action in possible_actions:
             # Compute next state
@@ -61,12 +63,12 @@ class DavidPlayer(BasePlayer):
                     return action
 
             # Choose the best action
-            action_value = [next_probabilities[i] * self.max_value(next_state, self.player_id, depth, alpha, beta) for i, next_state in enumerate(next_states)]
+            action_value = sum([next_probabilities[i] * self.max_value(next_state, self.player_id, depth, alpha, beta) for i, next_state in enumerate(next_states)])
             if action_value > best_value:
                 best_value = action_value
                 best_action = action
         
-        print(best_value, best_action)
+        print(best_value, time.time() - tmp)
         return best_action
     
     ######################
