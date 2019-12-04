@@ -23,17 +23,17 @@ from utils import player2server
 class IbrahimPlayer(BasePlayer):
     def __init__(self, name, sock):
         BasePlayer.__init__(self, name, sock)
-        height, width = self.game_state.shape[:2]; k = 10
-        gaussian_matrix = np.array([
-            [
-                np.sqrt(2 * np.pi * k) * multivariate_normal.pdf(max(abs(x - width), abs(y - height)), mean=0, cov=k)
-                for x in range(2 * width)
-            ] for y in range(2 * height)
-        ])
-        self.gaussian_weights = {}
-        for y in range(height):
-            for x in range(width):
-                self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
+        # height, width = self.game_state.shape[:2]; k = 10
+        # gaussian_matrix = np.array([
+        #     [
+        #         np.sqrt(2 * np.pi * k) * multivariate_normal.pdf(max(abs(x - width), abs(y - height)), mean=0, cov=k)
+        #         for x in range(2 * width)
+        #     ] for y in range(2 * height)
+        # ])
+        # self.gaussian_weights = {}
+        # for y in range(height):
+        #     for x in range(width):
+        #         self.gaussian_weights[(x, y)] = gaussian_matrix[height - y:2*height - y, width - x:2*width - x]
 
     def get_next_actions(self, depth=4):
         possible_actions = self.get_possible_actions(self.game_state, self.player_id)
@@ -77,75 +77,56 @@ class IbrahimPlayer(BasePlayer):
         # IDs
         ennemy_id = 3 - player_id
         human_id = 0
-        max_dist = max(game_state.shape[0], game_state.shape[1])
         
         # Compute populations
         total_pop = self.get_total_population(game_state)
-        player_pop_value = 1. * self.get_total_population(game_state, filter_id=player_id) / total_pop
-        ennemy_pop_value = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_pop
-        pop_value = player_pop_value - ennemy_pop_value
+        player_pop_score = 1. * self.get_total_population(game_state, filter_id=player_id) / total_pop
+        ennemy_pop_score = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_pop
+        # Game finish
+        if player_pop_score == 0:
+            return -10000
+        if ennemy_pop_score == 0:
+            return 10000
+        population_score = player_pop_score - ennemy_pop_score
 
         # More complex features
-        # sign_func_human = lambda x: np.where(x >= 0, 1, 0)
-        sign_func_ennemy = lambda x: np.where(x >= 0, 1, -1)
+        def compute_scores_maps(game_state, id1, id2, feasability, total_pop=total_pop):
+            max_dist = 1. * (game_state.shape[0] + game_state.shape[1])
+            scores_maps = []
+            Ys_1, Xs_1 = np.where(game_state[:, :, id1] > 0)
+            for i in range(len(Xs_1)):
+                # Get coords and number
+                x_1 = Xs_1[i]
+                y_1 = Ys_1[i]
+                n_1 = game_state[y_1, x_1, id1]
+                # Init. scores
+                scores_map = np.zeros((game_state.shape[0], game_state.shape[1]))
+                Ys_2, Xs_2 = np.where(game_state[:, :, id2] > 0)
+                for j in range(len(Xs_2)):
+                    # Get coords and number
+                    x_2 = Xs_2[j]
+                    y_2 = Ys_2[j]
+                    n_2 = game_state[y_2, x_2, id2]
+                    # Compute features
+                    distance = (1. - max(abs(x_1 - x_2), abs(y_1 - y_2)) / max_dist) ** 20
+                    population = n_2 / n_1
+                    feasible = feasability(n_1, n_2)
+                    scores_map[y_2, x_2] = distance * feasible * population
+                scores_maps.append(scores_map)
+            return np.array(scores_maps)
 
-        # Human - Player distances
-        human_player_distances = []
-        Ys_player, Xs_player = np.where(game_state[:, :, player_id] > 0)
-        for i in range(len(Xs_player)):
-            x_player = Xs_player[i]; y_player = Ys_player[i]
-            n_player = game_state[y_player, x_player, player_id]
-            human_player_distance = np.zeros((game_state.shape[0], game_state.shape[1]))
-            Ys_human, Xs_human = np.where(game_state[:, :, human_id] > 0)
-            for j in range(len(Xs_human)):
-                x_human = Xs_human[j]; y_human = Ys_human[j]
-                n_human = game_state[y_human, x_human, human_id]
-                human_player_distance[y_human, x_human] = max(abs(x_player - x_human), abs(y_player - y_human)) * (1. if n_player >= n_human else max_dist)
-            human_player_distances.append(human_player_distance)
-        human_player_distances = np.array(human_player_distances)
+        # Computing scores
+        human_player_scores = compute_scores_maps(game_state, player_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
+        human_ennemy_scores = compute_scores_maps(game_state, ennemy_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
+        player_ennemy_scores = compute_scores_maps(game_state, player_id, ennemy_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
+        ennemy_player_scores = compute_scores_maps(game_state, ennemy_id, player_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
+        human_player_scores = np.max(human_player_scores, axis=0)
+        human_ennemy_scores = np.max(human_ennemy_scores, axis=0)
+        human_scores = np.max(human_player_scores - human_ennemy_scores)
+        player_ennemy_scores = np.max(player_ennemy_scores)
+        ennemy_player_scores = np.max(ennemy_player_scores)
 
-        # Human - Ennemy distances
-        human_ennemy_distances = []
-        Ys_ennemy, Xs_ennemy = np.where(game_state[:, :, ennemy_id] > 0)
-        for i in range(len(Xs_ennemy)):
-            x_ennemy = Xs_ennemy[i]; y_ennemy = Ys_ennemy[i]
-            n_ennemy = game_state[y_ennemy, x_ennemy, ennemy_id]
-            human_ennemy_distance = np.zeros((game_state.shape[0], game_state.shape[1]))
-            Ys_human, Xs_human = np.where(game_state[:, :, human_id] > 0)
-            for j in range(len(Xs_human)):
-                x_human = Xs_human[j]; y_human = Ys_human[j]
-                n_human = game_state[y_human, x_human, human_id]
-                human_ennemy_distance[y_human, x_human] = max(abs(x_ennemy - x_human), abs(y_ennemy - y_human)) * (1. if n_ennemy >= n_human else max_dist)
-            human_ennemy_distances.append(human_ennemy_distance)
-        human_ennemy_distances = np.array(human_ennemy_distances)
-
-        # Human - Player score
-        humans_player_mask = np.min(human_player_distances, axis=0) - np.min(human_ennemy_distances, axis=0)
-        humans_player_mask = np.where(humans_player_mask < 0, 1, 0)
-        human_player_dist_val = 0
-        Ys, Xs = np.where(game_state[:, :, player_id] > 0)
-        for i in range(len(Xs)):
-            x = Xs[i]; y = Ys[i]
-            human_player_dist_val += np.max(humans_player_mask * self.gaussian_weights[(x, y)] * (game_state[:, :, human_id] / total_pop))
-        
-        # Human - Ennemy score
-        humans_ennemy_mask = np.min(human_ennemy_distances, axis=0) - np.min(human_player_distances, axis=0)
-        humans_ennemy_mask = np.where(humans_ennemy_mask < 0, 1, 0)
-        human_ennemy_dist_val = 0
-        Ys, Xs = np.where(game_state[:, :, ennemy_id] > 0)
-        for i in range(len(Xs)):
-            x = Xs[i]; y = Ys[i]
-            human_ennemy_dist_val += np.max(humans_ennemy_mask * self.gaussian_weights[(x, y)] * (game_state[:, :, human_id] / total_pop))
-        
-        # player - ennemy distance
-        player_ennemy_dist_val = 0
-        Ys, Xs = np.where(game_state[:, :, player_id] > 0)
-        for i in range(len(Xs)):
-            x = Xs[i]; y = Ys[i]
-            player_ennemy_diff = np.where(game_state[:, :, ennemy_id] == 0, 0, sign_func_ennemy(game_state[y, x, player_id] - 1.5 * game_state[:, :, ennemy_id]))
-            player_ennemy_dist_val += np.max(player_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, ennemy_id] / total_pop))
-
-        return pop_value * 1000 + player_ennemy_dist_val * 10 + (human_player_dist_val - human_ennemy_dist_val)
+        return population_score * 1000 + (player_ennemy_scores - ennemy_player_scores) * 10 + human_scores
 
     #############
     # Algorithm #
