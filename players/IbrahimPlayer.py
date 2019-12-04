@@ -76,6 +76,8 @@ class IbrahimPlayer(BasePlayer):
     def heuristic_value(self, game_state, player_id):
         # IDs
         ennemy_id = 3 - player_id
+        human_id = 0
+        max_dist = max(game_state.shape[0], game_state.shape[1])
         
         # Compute populations
         total_pop = self.get_total_population(game_state)
@@ -83,31 +85,57 @@ class IbrahimPlayer(BasePlayer):
         ennemy_pop_value = 1. * self.get_total_population(game_state, filter_id=ennemy_id) / total_pop
         pop_value = player_pop_value - ennemy_pop_value
 
-        # Game end
-        if player_pop_value == 0:
-            return -10000
-        elif ennemy_pop_value == 0:
-            return 10000
-
         # More complex features
-        sign_func_human = lambda x: np.where(x >= 0, 1, 0)
+        # sign_func_human = lambda x: np.where(x >= 0, 1, 0)
         sign_func_ennemy = lambda x: np.where(x >= 0, 1, -1)
 
-        # human - player distance
+        # Human - Player distances
+        human_player_distances = []
+        Ys_player, Xs_player = np.where(game_state[:, :, player_id] > 0)
+        for i in range(len(Xs_player)):
+            x_player = Xs_player[i]; y_player = Ys_player[i]
+            n_player = game_state[y_player, x_player, player_id]
+            human_player_distance = np.zeros((game_state.shape[0], game_state.shape[1]))
+            Ys_human, Xs_human = np.where(game_state[:, :, human_id] > 0)
+            for j in range(len(Xs_human)):
+                x_human = Xs_human[j]; y_human = Ys_human[j]
+                n_human = game_state[y_human, x_human, human_id]
+                human_player_distance[y_human, x_human] = max(abs(x_player - x_human), abs(y_player - y_human)) * (1. if n_player >= n_human else max_dist)
+            human_player_distances.append(human_player_distance)
+        human_player_distances = np.array(human_player_distances)
+
+        # Human - Ennemy distances
+        human_ennemy_distances = []
+        Ys_ennemy, Xs_ennemy = np.where(game_state[:, :, ennemy_id] > 0)
+        for i in range(len(Xs_ennemy)):
+            x_ennemy = Xs_ennemy[i]; y_ennemy = Ys_ennemy[i]
+            n_ennemy = game_state[y_ennemy, x_ennemy, ennemy_id]
+            human_ennemy_distance = np.zeros((game_state.shape[0], game_state.shape[1]))
+            Ys_human, Xs_human = np.where(game_state[:, :, human_id] > 0)
+            for j in range(len(Xs_human)):
+                x_human = Xs_human[j]; y_human = Ys_human[j]
+                n_human = game_state[y_human, x_human, human_id]
+                human_ennemy_distance[y_human, x_human] = max(abs(x_ennemy - x_human), abs(y_ennemy - y_human)) * (1. if n_ennemy >= n_human else max_dist)
+            human_ennemy_distances.append(human_ennemy_distance)
+        human_ennemy_distances = np.array(human_ennemy_distances)
+
+        # Human - Player score
+        humans_player_mask = np.min(human_player_distances, axis=0) - np.min(human_ennemy_distances, axis=0)
+        humans_player_mask = np.where(humans_player_mask < 0, 1, 0)
         human_player_dist_val = 0
         Ys, Xs = np.where(game_state[:, :, player_id] > 0)
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
-            human_player_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, player_id] - game_state[:, :, 0]))
-            human_player_dist_val += np.max(human_player_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
+            human_player_dist_val += np.max(humans_player_mask * self.gaussian_weights[(x, y)] * (game_state[:, :, human_id] / total_pop))
         
-        # human - ennemy distance
+        # Human - Ennemy score
+        humans_ennemy_mask = np.min(human_ennemy_distances, axis=0) - np.min(human_player_distances, axis=0)
+        humans_ennemy_mask = np.where(humans_ennemy_mask < 0, 1, 0)
         human_ennemy_dist_val = 0
         Ys, Xs = np.where(game_state[:, :, ennemy_id] > 0)
         for i in range(len(Xs)):
             x = Xs[i]; y = Ys[i]
-            human_ennemy_diff = np.where(game_state[:, :, 0] == 0, 0, sign_func_human(game_state[y, x, ennemy_id] - game_state[:, :, 0]))
-            human_ennemy_dist_val += np.max(human_ennemy_diff * self.gaussian_weights[(x, y)] * (game_state[:, :, 0] / total_pop))
+            human_ennemy_dist_val += np.max(humans_ennemy_mask * self.gaussian_weights[(x, y)] * (game_state[:, :, human_id] / total_pop))
         
         # player - ennemy distance
         player_ennemy_dist_val = 0
@@ -130,7 +158,7 @@ class IbrahimPlayer(BasePlayer):
         # Game finish
         game_finish, winner = self.game_is_finished(game_state, player_id)
         if game_finish:
-            return winner * 100000
+            return winner * 10000
         if depth <= 0 or len(possible_actions) == 0:
             return self.heuristic_value(game_state, player_id)
 
@@ -257,3 +285,35 @@ class IbrahimPlayer(BasePlayer):
         else:
             total += np.sum(game_state)
         return total
+
+    def get_possible_actions(self, game_state, player_id):
+        # Get game limits
+        H, W = game_state.shape[:2]
+
+        # Get possible actions
+        possible_actions = []
+        Ys, Xs = np.where(game_state[:, :, player_id])
+        for i in range(len(Xs)):
+            x, y = Xs[i], Ys[i]
+            number = int(game_state[y, x][player_id])
+            if number:
+                if y > 0:
+                    possible_actions.append([((x, y), number, (x, y-1))])
+                if y < H - 1:
+                    possible_actions.append([((x, y), number, (x, y+1))])
+
+                if x > 0:
+                    possible_actions.append([((x, y), number, (x-1, y))])
+                    if y > 0:
+                        possible_actions.append([((x, y), number, (x-1, y-1))])
+                    if y < H - 1:
+                        possible_actions.append([((x, y), number, (x-1, y+1))])
+                
+                if x < W - 1:
+                    possible_actions.append([((x, y), number, (x+1, y))])
+                    if y > 0:
+                        possible_actions.append([((x, y), number, (x+1, y-1))])
+                    if y < H - 1:
+                        possible_actions.append([((x, y), number, (x+1, y+1))])
+
+        return possible_actions
