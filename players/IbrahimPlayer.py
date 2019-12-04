@@ -259,6 +259,12 @@ class IbrahimPlayer(BasePlayer):
     def get_possible_actions(self, game_state, player_id):
         # Get game limits
         H, W = game_state.shape[:2]
+        ennemy_id = 3 - player_id
+
+        # Populations
+        n_player = np.sum(game_state[:, :, player_id])
+        n_ennemy = np.sum(game_state[:, :, ennemy_id])
+        threat = n_ennemy >= 1.5 * n_player
 
         # Get possible actions
         possible_actions = []
@@ -268,30 +274,30 @@ class IbrahimPlayer(BasePlayer):
             number = int(game_state[y, x][player_id])
             if number:
                 if y > 0:
-                    if np.sum(game_state[:y, :, :]) != 0:
+                    if threat or np.sum(game_state[:y, :, :]) != 0:
                         possible_actions.append([((x, y), number, (x, y-1))])
                 if y < H - 1:
-                    if np.sum(game_state[y+1:, :, :]) != 0:
+                    if threat or np.sum(game_state[y+1:, :, :]) != 0:
                         possible_actions.append([((x, y), number, (x, y+1))])
 
                 if x > 0:
-                    if np.sum(game_state[:, :x, :]) != 0:
+                    if threat or np.sum(game_state[:, :x, :]) != 0:
                         possible_actions.append([((x, y), number, (x-1, y))])
                     if y > 0:
-                        if np.sum(game_state[:y, :x, :]) != 0:
+                        if threat or np.sum(game_state[:y, :x, :]) != 0:
                             possible_actions.append([((x, y), number, (x-1, y-1))])
                     if y < H - 1:
-                        if np.sum(game_state[y+1:, :x, :]) != 0:
+                        if threat or np.sum(game_state[y+1:, :x, :]) != 0:
                             possible_actions.append([((x, y), number, (x-1, y+1))])
                 
                 if x < W - 1:
-                    if np.sum(game_state[:, x+1:, :]) != 0:
+                    if threat or np.sum(game_state[:, x+1:, :]) != 0:
                         possible_actions.append([((x, y), number, (x+1, y))])
                     if y > 0:
-                        if np.sum(game_state[:y, x+1:, :]) != 0:
+                        if threat or np.sum(game_state[:y, x+1:, :]) != 0:
                             possible_actions.append([((x, y), number, (x+1, y-1))])
                     if y < H - 1:
-                        if np.sum(game_state[y+1:, x+1:, :]) != 0:
+                        if threat or np.sum(game_state[y+1:, x+1:, :]) != 0:
                             possible_actions.append([((x, y), number, (x+1, y+1))])
 
         return possible_actions
