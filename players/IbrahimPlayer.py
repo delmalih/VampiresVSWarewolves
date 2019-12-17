@@ -37,7 +37,6 @@ class IbrahimPlayer(BasePlayer):
         alpha = -float("inf")
         beta = float("inf")
 
-        tmp = time.time()
         # Looping over all possible actions
         for action in possible_actions:
             # Compute next state
@@ -55,7 +54,6 @@ class IbrahimPlayer(BasePlayer):
                 best_value = action_value
                 best_action = action
         
-        print(best_value, time.time() - tmp)
         return best_action
     
     ######################
@@ -97,25 +95,39 @@ class IbrahimPlayer(BasePlayer):
                     y_2 = Ys_2[j]
                     n_2 = game_state[y_2, x_2, id2]
                     # Compute features
-                    distance = (1. - max(abs(x_1 - x_2), abs(y_1 - y_2)) / max_dist) ** 20
+                    distance = (1. - max(abs(x_1 - x_2), abs(y_1 - y_2)) / max_dist) ** 5
                     population = n_2 / n_1
                     feasible = feasability(n_1, n_2)
                     scores_map[y_2, x_2] = distance * feasible * population
                 scores_maps.append(scores_map)
             return np.array(scores_maps)
 
-        # Computing scores
-        human_player_scores = compute_scores_maps(game_state, player_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
-        human_player_scores = np.max(human_player_scores, axis=0)
-        human_ennemy_scores = compute_scores_maps(game_state, ennemy_id, human_id, feasability=lambda n1, n2: 1 if n1 >= n2 else 0)
-        human_ennemy_scores = np.max(human_ennemy_scores, axis=0)
-        player_ennemy_scores = compute_scores_maps(game_state, player_id, ennemy_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
-        player_ennemy_scores = np.max(player_ennemy_scores)
-        ennemy_player_scores = compute_scores_maps(game_state, ennemy_id, player_id, feasability=lambda n1, n2: 1 if n1 >= 1.5 * n2 else 0)
-        ennemy_player_scores = np.max(ennemy_player_scores)
-        human_scores = np.max(human_player_scores - human_ennemy_scores)
+        # Feasability functions
+        def feasability_creature_human(creature_pop, human_pop):
+            if creature_pop >= human_pop:
+                return 1.0
+            return 1. * creature_pop / (2. * human_pop)
+        
+        def feasability_creatures(creature1_pop, creature2_pop):
+            if creature1_pop >= 1.5 * creature2_pop:
+                return 1.0
+            if creature1_pop <= 1.5 * creature2_pop:
+                return 0.0
+            if creature1_pop == creature2_pop:
+                return 0.5
+            if creature1_pop < creature2_pop:
+                return 1. * creature1_pop / (2. * creature2_pop)
+            return 1. * creature1_pop / creature2_pop - 0.5
 
-        return population_score * 1000 + (player_ennemy_scores - ennemy_player_scores) * 10 + human_scores
+        # Computing scores
+        human_player_scores = compute_scores_maps(game_state, player_id, human_id, feasability=feasability_creature_human)
+        human_ennemy_scores = compute_scores_maps(game_state, ennemy_id, human_id, feasability=feasability_creature_human)
+        player_ennemy_scores = compute_scores_maps(game_state, player_id, ennemy_id, feasability=feasability_creatures)
+        ennemy_player_scores = compute_scores_maps(game_state, ennemy_id, player_id, feasability=feasability_creatures)
+        human_scores = np.max(np.max(human_player_scores, axis=0) - np.max(human_ennemy_scores, axis=0))
+        player_ennemy_scores = np.max(player_ennemy_scores) - np.max(ennemy_player_scores)
+
+        return population_score * 1000 + player_ennemy_scores * 10 + human_scores
 
     #############
     # Algorithm #

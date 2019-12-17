@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("-n", "--name", dest="name", help="Player name", default="Anonymous")
     parser.add_argument("--david", dest="david", help="Choose david player", action="store_true")
     parser.add_argument("--ibra", dest="ibra", help="Choose ibra player", action="store_true")
+    parser.add_argument("--random", dest="random", help="Choose random player", action="store_true")
     return parser.parse_args()
 
 def init_variables():
@@ -44,8 +45,10 @@ def main():
             ply = players.DavidPlayer(args.name, sock)
         elif args.ibra:
             ply = players.IbrahimPlayer(args.name, sock)
-        else:
+        elif args.random:
             ply = players.RandomPlayer(args.name, sock)
+        else:
+            ply = players.IbrahimPlayer(args.name, sock)
         ply.play()
     except KeyboardInterrupt:
         print("Goodbye ! :)")
