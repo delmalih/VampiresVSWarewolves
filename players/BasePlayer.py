@@ -65,7 +65,6 @@ class BasePlayer:
         info_received = {}
         while headers_to_get:
             header = server2player.get_header(self.sock)
-            print(header)
             if header == "END":
                 self.__init__(self.name, self.sock)
                 break

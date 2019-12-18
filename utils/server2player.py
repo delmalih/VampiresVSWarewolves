@@ -46,7 +46,6 @@ def header2action(header):
     elif header == "MAP" or header == "UPD":
         return get_MAP_UPD
     elif header == "BYE":
-        print("Goodbye ! :)")
         sys.exit(0)
     else:
         raise NotImplementedError

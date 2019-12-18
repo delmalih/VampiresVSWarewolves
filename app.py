@@ -51,7 +51,6 @@ def main():
             ply = players.IbrahimPlayer(args.name, sock)
         ply.play()
     except KeyboardInterrupt:
-        print("Goodbye ! :)")
         if constants.connected:
             sock.shutdown(socket.SHUT_RDWR)
             sock.close()

@@ -50,7 +50,6 @@ class DavidPlayer(BasePlayer):
         alpha = -float("inf")
         beta = float("inf")
 
-        tmp = time.time()
         # Looping over all possible actions
         for action in possible_actions:
             # Compute next state
@@ -68,7 +67,6 @@ class DavidPlayer(BasePlayer):
                 best_value = action_value
                 best_action = action
         
-        print(best_value, time.time() - tmp)
         return best_action
     
     ######################
