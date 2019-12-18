@@ -28,11 +28,15 @@ class BasePlayer:
         self.start_game()
     
     def start_game(self):
+        # Start time
+        self.time_passed = 0
+
         # Send NME
         player2server.send_NME(self.sock, edict(name = self.name))
 
         # Getting data
         self.update_game_state(["SET", "HUM", "HME", "MAP"])
+        self.update_game()
     
     def update_game(self):
         self.update_game_state(["UPD"])
@@ -51,6 +55,7 @@ class BasePlayer:
             })
             player2server.send_MOV(self.sock, params)
         self.update_game()
+        self.time_passed += 2
         self.play()
 
     def get_next_actions(self):
@@ -60,7 +65,6 @@ class BasePlayer:
         info_received = {}
         while headers_to_get:
             header = server2player.get_header(self.sock)
-            print(header)
             if header == "END":
                 self.__init__(self.name, self.sock)
                 break
@@ -90,18 +94,6 @@ class BasePlayer:
             matrix[y, x, 1] = n_v
             matrix[y, x, 2] = n_w
         return matrix
-    
-    # def matrix_to_state(self, matrix):
-    #     H, W = matrix.shape[:2]
-    #     commands = {}
-    #     for y in range(H):
-    #         for x in range(W):
-    #             n_h = 0 if matrix[y, x, 0] == 0 else matrix[y, x, 0]
-    #             n_v = 0 if matrix[y, x, 1] == 0 else matrix[y, x, 1]
-    #             n_w = 0 if matrix[y, x, 2] == 0 else matrix[y, x, 2]
-    #             if n_h + n_v + n_w != 0:
-    #                 commands[(x, y)] = (n_h, n_v, n_w)
-    #     return { "height": H, "width": W, "commands": commands }
 
     def get_possible_actions(self, game_state, player_id):
         # Get game limits
@@ -109,29 +101,29 @@ class BasePlayer:
 
         # Get possible actions
         possible_actions = []
-        for y in range(H):
-            for x in range(W):
-                number = game_state[y, x][player_id]
+        Ys, Xs = np.where(game_state[:, :, player_id])
+        for i in range(len(Xs)):
+            x, y = Xs[i], Ys[i]
+            number = int(game_state[y, x][player_id])
+            if number:
+                if y > 0:
+                    possible_actions.append([((x, y), number, (x, y-1))])
+                if y < H - 1:
+                    possible_actions.append([((x, y), number, (x, y+1))])
 
-                if number:
+                if x > 0:
+                    possible_actions.append([((x, y), number, (x-1, y))])
                     if y > 0:
-                        possible_actions.append([((x, y), number, (x, y-1))])
+                        possible_actions.append([((x, y), number, (x-1, y-1))])
                     if y < H - 1:
-                        possible_actions.append([((x, y), number, (x, y+1))])
-
-                    if x > 0:
-                        possible_actions.append([((x, y), number, (x-1, y))])
-                        if y > 0:
-                            possible_actions.append([((x, y), number, (x-1, y-1))])
-                        if y < H - 1:
-                            possible_actions.append([((x, y), number, (x-1, y+1))])
-                    
-                    if x < W - 1:
-                        possible_actions.append([((x, y), number, (x+1, y))])
-                        if y > 0:
-                            possible_actions.append([((x, y), number, (x+1, y-1))])
-                        if y < H - 1:
-                            possible_actions.append([((x, y), number, (x+1, y+1))])
+                        possible_actions.append([((x, y), number, (x-1, y+1))])
+                
+                if x < W - 1:
+                    possible_actions.append([((x, y), number, (x+1, y))])
+                    if y > 0:
+                        possible_actions.append([((x, y), number, (x+1, y-1))])
+                    if y < H - 1:
+                        possible_actions.append([((x, y), number, (x+1, y+1))])
 
         return possible_actions
         

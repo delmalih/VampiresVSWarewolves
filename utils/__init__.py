@@ -38,7 +38,6 @@ def connect_to_server(host, port, name, constants):
         sock.connect((host, int(port)))
         constants.connected = True
     except:
-        print("Could not connect to server :/")
         sys.exit(0)
         
     return sock
