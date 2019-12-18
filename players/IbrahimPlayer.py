@@ -106,7 +106,7 @@ class IbrahimPlayer(BasePlayer):
         def feasability_creature_human(creature_pop, human_pop):
             if creature_pop >= human_pop:
                 return 1.0
-            return 1. * creature_pop / (2. * human_pop)
+            return (1. * creature_pop / (2. * human_pop)) ** 4
         
         def feasability_creatures(creature1_pop, creature2_pop):
             if creature1_pop >= 1.5 * creature2_pop:
@@ -116,8 +116,8 @@ class IbrahimPlayer(BasePlayer):
             if creature1_pop == creature2_pop:
                 return 0.5
             if creature1_pop < creature2_pop:
-                return 1. * creature1_pop / (2. * creature2_pop)
-            return 1. * creature1_pop / creature2_pop - 0.5
+                return (1. * creature1_pop / (2. * creature2_pop)) ** 4
+            return (1. * creature1_pop / creature2_pop - 0.5) ** 2
 
         # Computing scores
         human_player_scores = compute_scores_maps(game_state, player_id, human_id, feasability=feasability_creature_human)
@@ -314,5 +314,3 @@ class IbrahimPlayer(BasePlayer):
 
         return possible_actions
     
-    def hash_state(self, game_state, player_id):
-        return hash(str(game_state) + str(player_id))
