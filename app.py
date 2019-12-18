@@ -19,7 +19,7 @@ import players
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Arguments for the game")
-    parser.add_argument("-H", "--host", dest="host", help="HOST IPv4 Address", required=True)
+    parser.add_argument("-H", "--host", dest="host", help="HOST IPv4 Address", default="138.195.198.98")
     parser.add_argument("-P", "--port", dest="port", help="Server PORT", default="5555")
     parser.add_argument("-n", "--name", dest="name", help="Player name", default="Anonymous")
     parser.add_argument("--david", dest="david", help="Choose david player", action="store_true")
