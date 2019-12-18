@@ -11,7 +11,7 @@ from easydict import EasyDict as edict
 import time
 
 """" Local """
-from BasePlayer import BasePlayer
+from .BasePlayer import BasePlayer
 sys.path.append("..")
 from utils import player2server
 
